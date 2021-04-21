@@ -118,12 +118,13 @@ current directory."
   (concat (file-name-as-directory (cmake-project-find-root-directory))
           cmake-project-default-build-dir-name))
 
-(defun cmake-project-current-build-command ()
+(defun cmake-project-current-build-command (&optional target)
   "Command line to compile current project as configured in the
 build directory."
   (concat "cmake --build "
-          (shell-quote-argument (expand-file-name
-                                 cmake-project-build-directory))))
+	  (shell-quote-argument (expand-file-name
+				 cmake-project-build-directory))
+	  (if target (concat " --target " target) "")))
 
 ;; Build command directory extraction regexp.  Might be useful some day:
 ;; "cmake\\s-+--build\\s-+\\(?:\"\\([^\"]*\\)\\\"\\|\\(\\S-*\\)\\)"
@@ -241,6 +242,32 @@ specified interactively."
           (concat " -G " (shell-quote-argument (cmake-project-set-architecture generator)))
 	  )))
       (cmake-project--changed-build-directory build-directory))))
+
+(setq def-target nil)
+(defvar cmake-project-targets nil)
+
+(defun cmake-project-refresh-targets ()
+  "Read available CMake targets into cmake-project-targets variable"
+  (if cmake-project-build-directory
+      (setq cmake-project-targets (split-string (shell-command-to-string (concat
+									  (cmake-project-current-build-command
+									   '"help")
+									  " | awk '/.../{print
+$2}'")) "\n"))
+    (user-error
+     "cmake-project is not set up. Consider using cmake-project-configure-project")))
+
+(defun cmake-project-compile-target (target)
+  (interactive (let ()
+		 (if (not cmake-project-targets)
+		     (cmake-project-refresh-targets))
+		 (list (completing-read (if def-target (format "Target [%s]: " def-target)
+					  "Target: ") cmake-project-targets nil t nil nil
+					  def-target))))
+  (setq def-target target)
+  (if cmake-project-build-directory (compile (cmake-project-current-build-command target))
+    (user-error
+     "cmake-project is not set up. Consider using cmake-project-configure-project")))
 
 ;;;###autoload
 (define-minor-mode cmake-project-mode
